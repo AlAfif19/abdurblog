@@ -1,0 +1,558 @@
+# 📘 Project Documentation: abdurblog
+
+## 1. Executive Summary
+Welcome to **abdurblog**, a personal portfolio and blogging system designed with **clean code**, **scalability**, and **security** in mind. As a Full Stack Developer, I have architected this solution using industry best practices to ensure high performance, maintainability, and a professional user experience.
+
+This system utilizes a **Monorepo-style structure** to separate concerns between the Frontend (Nuxt 3), Backend (Hono), and Infrastructure (Docker).
+
+## 2. Architecture & Tech Stack
+
+| Component | Technology | Reasoning |
+| :--- | :--- | :--- |
+| **Frontend** | **Nuxt 3 (Vue 3)** | SSR/SSG capabilities for SEO, Vue 3 composition API. |
+| **UI Framework** | **TailwindCSS + Shadcn-vue** | Utility-first CSS, accessible components, highly customizable. |
+| **Backend** | **Hono** | Ultra-lightweight, fast, minimal boilerplate, runs on Node.js. |
+| **Database** | **PostgreSQL 15** | Robust relational database, industry standard. |
+| **ORM** | **Prisma** | Type-safe database access, easy migrations. |
+| **Storage** | **MinIO** | S3-compatible object storage for images (Self-hosted). |
+| **Auth** | **JWT + Refresh Token** | Secure stateless auth with HttpOnly cookies for refresh tokens. |
+| **Validation** | **Zod** | Schema validation for API inputs (TypeScript first). |
+| **Infrastructure**| **Docker & Compose** | Containerization for consistent environments (DB & Storage). |
+| **CI/CD** | **GitHub Actions** | Automated testing and building pipeline. |
+
+---
+
+## 3. Prerequisites
+Before running the code, ensure your machine has the following installed:
+
+1.  **Node.js** (LTS Version 20.x or 22.x) -> [Download](https://nodejs.org/)
+2.  **Docker Engine** & **Docker Compose** (Native installation, no Docker Desktop required).
+3.  **Git** -> [Download](https://git-scm.com/)
+4.  **Code Editor** (VS Code recommended).
+
+---
+
+## 4. Project Structure
+We will use a modular structure to keep the codebase clean and scalable.
+
+```text
+abdurblog/
+├── apps/
+│   ├── web/                # Nuxt 3 Frontend
+│   │   ├── components/ui/  # Shadcn Components
+│   │   ├── pages/          # Routes
+│   │   ├── stores/         # Pinia State Management
+│   │   └── nuxt.config.ts
+│   └── api/                # Hono Backend
+│       ├── src/
+│       │   ├── index.ts    # Entry point
+│       │   └── modules/    # Logic (Auth, Posts)
+│       └── package.json
+├── packages/
+│   └── database/           # Prisma Schema
+│       └── prisma/
+│           └── schema.prisma
+├── .github/
+│   └── workflows/          # CI/CD Pipeline
+├── docker-compose.yml      # Infrastructure Orchestration
+├── .env                    # Environment Variables
+├── .gitignore
+└── README.md
+```
+
+---
+
+## 5. Implementation Code
+
+### A. Infrastructure Configuration
+
+**File: `docker-compose.yml`**
+*Orchestrates PostgreSQL and MinIO storage.*
+
+```yaml
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: abdurblog_db
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - abdurnet
+
+  minio:
+    image: minio/minio
+    container_name: abdurblog_storage
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+    networks:
+      - abdurnet
+
+volumes:
+  pgdata:
+  miniodata:
+
+networks:
+  abdurnet:
+    driver: bridge
+```
+
+**File: `.env`**
+*Create this in the root folder. Do not commit this to Git.*
+
+```env
+# Database
+DB_USER="abdur"
+DB_PASSWORD="securepassword123"
+DB_NAME="abdurblog"
+DATABASE_URL="postgresql://abdur:securepassword123@localhost:5432/abdurblog?schema=public"
+
+# MinIO Storage
+MINIO_USER="minioadmin"
+MINIO_PASSWORD="minioadmin"
+MINIO_ENDPOINT="http://localhost:9000"
+MINIO_BUCKET="abdurblog-images"
+
+# Security (Change these in Production!)
+JWT_SECRET="supersecretkey_change_this_in_prod"
+JWT_EXPIRES_IN="15m"
+REFRESH_TOKEN_SECRET="refreshsecretkey_change_this_in_prod"
+REFRESH_TOKEN_EXPIRES_IN="7d"
+
+# App Configuration
+NUXT_PUBLIC_API_BASE="http://localhost:3001"
+```
+
+### B. Backend (Apps/API)
+
+**1. Initialize Backend**
+```bash
+mkdir -p apps/api packages/database/prisma
+cd apps/api
+npm init -y
+npm install hono @hono/node-server prisma @prisma/client bcryptjs jsonwebtoken zod @minio/minio-js cors
+npm install -D typescript @types/node @types/bcryptjs @types/jsonwebtoken @types/cors tsx
+npx tsc --init
+```
+
+**2. Database Schema (`packages/database/prisma/schema.prisma`)**
+```prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  password     String
+  name         String?
+  role         String    @default("USER") // USER or ADMIN
+  refreshToken String?
+  createdAt    DateTime  @default(now())
+  posts        Post[]
+}
+
+model Post {
+  id        String   @id @default(uuid())
+  title     String
+  slug      String   @unique
+  content   String
+  imageUrl  String?
+  published Boolean  @default(false)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  createdAt DateTime @default(now())
+}
+```
+
+**3. Backend Entry Point (`apps/api/src/index.ts`)**
+*Handles Auth, CRUD, and Image Uploads.*
+
+```typescript
+import { serve } from '@hono/node-server';
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
+import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
+import jwtLib from 'jsonwebtoken';
+import { z } from 'zod';
+import { Client as MinioClient } from '@minio/minio-js';
+import { buffer } from 'stream/consumers';
+
+const app = new Hono();
+const prisma = new PrismaClient();
+
+// Configuration
+const JWT_SECRET = process.env.JWT_SECRET || 'secret';
+const MINIO_CONFIG = {
+  endPoint: 'localhost',
+  port: 9000,
+  useSSL: false,
+  accessKey: process.env.MINIO_USER || 'minioadmin',
+  secretKey: process.env.MINIO_PASSWORD || 'minioadmin',
+};
+const minioClient = new MinioClient(MINIO_CONFIG);
+
+// Middleware
+app.use('/*', cors({ origin: 'http://localhost:3000', credentials: true }));
+
+// Helpers
+const verifyToken = (token: string) => {
+  try { return jwtLib.verify(token, JWT_SECRET); } catch { return null; }
+};
+
+const authMiddleware = async (c: any, next: any) => {
+  const auth = c.req.header('Authorization');
+  if (!auth?.startsWith('Bearer ')) return c.json({ error: 'Unauthorized' }, 401);
+  const token = auth.split(' ')[1];
+  const payload = verifyToken(token);
+  if (!payload) return c.json({ error: 'Invalid Token' }, 401);
+  c.set('user', payload);
+  await next();
+};
+
+// Routes
+app.post('/api/auth/register', async (c) => {
+  const body = await c.req.json();
+  const schema = z.object({ email: z.email(), password: z.string().min(6), name: z.string() });
+  const valid = schema.safeParse(body);
+  if (!valid.success) return c.json({ error: 'Invalid input' }, 400);
+
+  const hashed = await bcrypt.hash(valid.data.password, 10);
+  const user = await prisma.user.create({
+    data: { ...valid.data, password: hashed },
+    select: { id: true, email: true, name: true }
+  });
+  return c.json(user);
+});
+
+app.post('/api/auth/login', async (c) => {
+  const { email, password } = await c.req.json();
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user || !(await bcrypt.compare(password, user.password))) {
+    return c.json({ error: 'Invalid credentials' }, 401);
+  }
+
+  const accessToken = jwtLib.sign({ id: user.id, role: user.role }, JWT_SECRET, { expiresIn: '15m' });
+  const refreshToken = jwtLib.sign({ id: user.id }, process.env.REFRESH_TOKEN_SECRET!, { expiresIn: '7d' });
+
+  await prisma.user.update({ where: { id: user.id }, data: { refreshToken } });
+
+  // Set Refresh Token in HttpOnly Cookie
+  c.header('Set-Cookie', `refreshToken=${refreshToken}; HttpOnly; Path=/; Max-Age=604800; SameSite=Strict`);
+  return c.json({ accessToken, user: { id: user.id, email: user.email, name: user.name } });
+});
+
+app.post('/api/posts', authMiddleware, async (c) => {
+  const user = c.get('user');
+  if (user.role !== 'ADMIN') return c.json({ error: 'Forbidden' }, 403);
+  
+  const formData = await c.req.formData();
+  const title = formData.get('title') as string;
+  const content = formData.get('content') as string;
+  const file = formData.get('image') as File | null;
+
+  let imageUrl = null;
+  if (file) {
+    const bucket = process.env.MINIO_BUCKET || 'abdurblog-images';
+    const fileName = `${Date.now()}-${file.name}`;
+    // Note: In production, ensure bucket exists or create it programmatically
+    await minioClient.putObject(bucket, fileName, await buffer(file.stream()), file.size);
+    imageUrl = `${MINIO_CONFIG.endPoint}:${MINIO_CONFIG.port}/${bucket}/${fileName}`;
+  }
+
+  const post = await prisma.post.create({
+    data: { title, content, imageUrl, authorId: user.id, slug: title.toLowerCase().replace(/ /g, '-') }
+  });
+  return c.json(post);
+});
+
+app.get('/api/posts', async (c) => {
+  const posts = await prisma.post.findMany({ where: { published: true }, orderBy: { createdAt: 'desc' } });
+  return c.json(posts);
+});
+
+// Start Server
+serve({ fetch: app.fetch, port: 3001 }, () => console.log('API running on http://localhost:3001'));
+```
+
+### C. Frontend (Apps/Web - Nuxt 3)
+
+**1. Initialize Frontend**
+```bash
+# From root folder
+npx nuxi@latest init apps/web
+cd apps/web
+npm install -D tailwindcss postcss autoprefixer
+npx tailwindcss init -p
+npm install @pinia/nuxt axios
+# Install Shadcn Vue
+npx shadcn-vue@latest init
+npx shadcn-vue@latest add button card input label textarea
+```
+
+**2. Nuxt Config (`apps/web/nuxt.config.ts`)**
+```typescript
+export default defineNuxtConfig({
+  devtools: { enabled: true },
+  modules: ['@pinia/nuxt', '@nuxtjs/tailwindcss'],
+  runtimeConfig: {
+    public: { apiBase: process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:3001' }
+  },
+  compatibilityDate: '2024-04-03'
+});
+```
+
+**3. State Management (`apps/web/stores/auth.ts`)**
+```typescript
+import { defineStore } from 'pinia';
+import axios from 'axios';
+
+export const useAuthStore = defineStore('auth', () => {
+  const user = ref(null);
+  const token = ref(localStorage.getItem('access_token'));
+  const config = useRuntimeConfig();
+
+  const api = axios.create({ baseURL: config.public.apiBase });
+  
+  api.interceptors.request.use((cfg) => {
+    if (token.value) cfg.headers.Authorization = `Bearer ${token.value}`;
+    return cfg;
+  });
+
+  const login = async (email: string, password: string) => {
+    const { data } = await api.post('/api/auth/login', { email, password });
+    token.value = data.accessToken;
+    user.value = data.user;
+    localStorage.setItem('access_token', data.accessToken);
+  };
+
+  const logout = () => {
+    token.value = null;
+    user.value = null;
+    localStorage.removeItem('access_token');
+  };
+
+  return { user, token, login, logout, api };
+});
+```
+
+**4. Home Page (`apps/web/pages/index.vue`)**
+```vue
+<template>
+  <div class="container mx-auto p-4">
+    <header class="flex justify-between items-center mb-8">
+      <h1 class="text-3xl font-bold">abdurblog</h1>
+      <div>
+        <NuxtLink v-if="authStore.user" to="/admin" class="px-4 py-2 bg-blue-600 text-white rounded">Dashboard</NuxtLink>
+        <NuxtLink v-else to="/login" class="px-4 py-2 bg-gray-200 rounded">Login</NuxtLink>
+      </div>
+    </header>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div v-for="post in posts" :key="post.id" class="border rounded overflow-hidden shadow">
+        <img v-if="post.imageUrl" :src="post.imageUrl" class="w-full h-48 object-cover" />
+        <div class="p-4">
+          <h2 class="text-xl font-semibold">{{ post.title }}</h2>
+          <p class="text-gray-600 mt-2">{{ post.content.substring(0, 100) }}...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+const authStore = useAuthStore();
+// Fetch posts from API
+const { data: posts } = await useFetch('http://localhost:3001/api/posts');
+</script>
+```
+
+**5. Admin Dashboard (`apps/web/pages/admin.vue`)**
+```vue
+<template>
+  <div class="container mx-auto p-4">
+    <h1 class="text-2xl font-bold mb-4">Create New Post</h1>
+    <form @submit.prevent="submitPost" class="space-y-4 max-w-lg">
+      <Input v-model="title" placeholder="Post Title" required />
+      <Textarea v-model="content" placeholder="Content" required />
+      <Input type="file" @change="file = $event.target.files[0]" />
+      <Button type="submit" :disabled="loading">{{ loading ? 'Publishing...' : 'Publish Post' }}</Button>
+    </form>
+  </div>
+</template>
+
+<script setup>
+const authStore = useAuthStore();
+const title = ref(''); 
+const content = ref(''); 
+const file = ref(null); 
+const loading = ref(false);
+
+const submitPost = async () => {
+  loading.value = true;
+  const formData = new FormData();
+  formData.append('title', title.value);
+  formData.append('content', content.value);
+  if (file.value) formData.append('image', file.value);
+
+  try {
+    await authStore.api.post('/api/posts', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+    alert('Post published successfully!');
+    navigateTo('/');
+  } catch (e) { 
+    alert('Error publishing post'); 
+  }
+  loading.value = false;
+};
+</script>
+```
+
+### D. CI/CD Pipeline
+
+**File: `.github/workflows/ci.yml`**
+```yaml
+name: CI/CD Pipeline
+on: [push]
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with: { node-version: '20' }
+      - name: Install Dependencies
+        run: |
+          cd apps/api && npm ci
+          cd ../web && npm ci
+      - name: Lint & Type Check
+        run: |
+          cd apps/api && npm run lint
+          cd ../web && npm run lint
+      - name: Build Docker Image
+        run: docker compose build
+```
+
+---
+
+## 6. Step-by-Step Run Guide
+
+Follow these instructions carefully to run the project locally.
+
+### Phase 1: Environment Setup
+1.  **Verify Docker:** Ensure Docker Engine is running.
+    ```bash
+    docker --version
+    docker compose version
+    ```
+2.  **Create Project:** Create the folder structure and copy the code provided above into the respective files.
+3.  **Environment Variables:** Ensure the `.env` file exists in the root folder with the correct values.
+
+### Phase 2: Start Infrastructure (DB & Storage)
+Open your terminal in the **root folder** (`abdurblog`) and run:
+```bash
+docker compose up -d
+```
+*This downloads and starts PostgreSQL and MinIO in the background.*
+
+### Phase 3: Database Migration
+We need to install backend dependencies and sync the database schema.
+```bash
+# Navigate to API folder
+cd apps/api
+
+# Install dependencies
+npm install
+
+# Generate Prisma Client
+npx prisma generate
+
+# Push Schema to Database
+npx prisma db push
+```
+*Note: Ensure `DATABASE_URL` in `.env` matches your local Docker Postgres port.*
+
+### Phase 4: Run Backend
+Still in the `apps/api` folder:
+```bash
+npm run dev
+# Or directly
+npx tsx src/index.ts
+```
+*Success Indicator:* `API running on http://localhost:3001`
+
+### Phase 5: Run Frontend
+Open a **new terminal** window and navigate to the frontend folder:
+```bash
+cd apps/web
+
+# Install dependencies
+npm install
+
+# Start Nuxt Development Server
+npm run dev
+```
+*Success Indicator:* `Nuxt 3 ready in ... http://localhost:3000`
+
+### Phase 6: Access the Application
+1.  **Frontend:** Open `http://localhost:3000` in your browser.
+2.  **Storage UI:** Open `http://localhost:9001` (Login: `minioadmin` / `minioadmin`) to verify uploaded images.
+3.  **Register/Login:** Use the API (via Postman or create a login page) to register an admin user first.
+
+---
+
+## 7. Termination & Cleanup Guide
+
+When you are finished working, follow these steps to stop services and free up resources.
+
+### 1. Stop Docker Containers (DB & MinIO)
+In the **root folder** terminal:
+```bash
+docker compose down
+```
+*This stops the containers but preserves data in volumes.*
+
+### 2. Stop Node.js Servers (Frontend & Backend)
+In the terminals where `npm run dev` is running:
+*   Press `Ctrl + C` twice.
+
+### 3. Complete Reset (Delete All Data)
+If you want to wipe the database and storage completely to start fresh:
+```bash
+docker compose down -v
+```
+*⚠️ Warning: This permanently deletes all database records and uploaded images.*
+
+---
+
+## 8. Maintenance & Best Practices
+
+1.  **Security:** Never commit the `.env` file to GitHub. Add it to `.gitignore`.
+2.  **Production:** When deploying to a VPS, update `DATABASE_URL` and `MINIO_ENDPOINT` in `.env` to use Docker service names (e.g., `http://postgres:5432`) instead of `localhost`.
+3.  **Images:** Since we use MinIO, if you scale the backend to multiple containers, images remain accessible centrally.
+4.  **Code Quality:** Run linters regularly before committing:
+    ```bash
+    cd apps/api && npm run lint
+    cd apps/web && npm run lint
+    ```
+
+This documentation provides a complete, scalable, and secure foundation for **abdurblog**. Happy coding!
