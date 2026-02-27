@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker compose:*)",
+      "Bash(npm install:*)",
+      "Bash(cp:*)",
+      "Bash(npx prisma:*)",
+      "Bash(DATABASE_URL=\"postgresql://abdur:securepassword123@localhost:5432/abdurblog?schema=public\" npx prisma:*)"
+    ]
+  }
+}
