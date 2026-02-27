@@ -5,7 +5,7 @@ import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
-import { Client as MinioClient } from '@minio/minio-js';
+import { Client as MinioClient } from 'minio';
 import { buffer } from 'stream/consumers';
 
 const app = new Hono();
