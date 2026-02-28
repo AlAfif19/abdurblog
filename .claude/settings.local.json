@@ -5,7 +5,17 @@
       "Bash(npm install:*)",
       "Bash(cp:*)",
       "Bash(npx prisma:*)",
-      "Bash(DATABASE_URL=\"postgresql://abdur:securepassword123@localhost:5432/abdurblog?schema=public\" npx prisma:*)"
+      "Bash(DATABASE_URL=\"postgresql://abdur:securepassword123@localhost:5432/abdurblog?schema=public\" npx prisma:*)",
+      "Bash(find:*)",
+      "Bash(timeout 10 npm run:*)",
+      "Bash(rm:*)",
+      "Bash(curl:*)",
+      "Bash(pkill:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(psql:*)",
+      "Bash(npm run:*)",
+      "Bash(netstat:*)",
+      "Bash(taskkill:*)"
     ]
   }
 }

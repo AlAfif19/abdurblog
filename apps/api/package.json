@@ -9,13 +9,14 @@
     "seed-admin": "tsx src/scripts/seed-admin.ts"
   },
   "dependencies": {
+    "@abdurblog/database": "file:../../packages/database",
     "@hono/node-server": "^1.13.5",
-    "minio": "^8.0.1",
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "hono": "^4.6.7",
     "jsonwebtoken": "^9.0.2",
+    "minio": "^8.0.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
