@@ -15,7 +15,10 @@
       "Bash(psql:*)",
       "Bash(npm run:*)",
       "Bash(netstat:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(\"/c/Program Files/PostgreSQL/*/bin/psql.exe\":*)",
+      "Bash(cmd.exe:*)",
+      "Bash(powershell.exe:*)"
     ]
   }
 }
