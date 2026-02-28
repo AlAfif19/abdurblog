@@ -18,7 +18,8 @@
       "Bash(taskkill:*)",
       "Bash(\"/c/Program Files/PostgreSQL/*/bin/psql.exe\":*)",
       "Bash(cmd.exe:*)",
-      "Bash(powershell.exe:*)"
+      "Bash(powershell.exe:*)",
+      "Bash(chmod +x:*)"
     ]
   }
 }
