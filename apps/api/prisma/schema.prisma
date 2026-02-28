@@ -33,3 +33,81 @@ model Post {
   @@index([published])
   @@index([slug])
 }
+
+model PortfolioHero {
+  id          String   @id @default(uuid())
+  heading     String
+  subheading  String
+  ctaText     String
+  ctaLink     String
+  imageUrl    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model PortfolioProject {
+  id          String   @id @default(uuid())
+  title       String
+  description String   @db.Text
+  imageUrl    String?
+  githubLink  String
+  liveLink    String?
+  tags        String[]
+  isActive    Boolean  @default(true)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([isActive])
+}
+
+model PortfolioSkill {
+  id          String   @id @default(uuid())
+  name        String
+  level       String
+  category    String
+  icon        String?
+  isActive    Boolean  @default(true)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([isActive])
+}
+
+model PortfolioEducation {
+  id          String   @id @default(uuid())
+  institution String
+  degree      String
+  field       String
+  startDate   DateTime
+  endDate     DateTime?
+  description String?
+  isActive    Boolean  @default(true)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  @@index([isActive])
+}
+
+model PortfolioContact {
+  id          String   @id @default(uuid())
+  email       String
+  phone       String?
+  linkedin    String?
+  github      String?
+  twitter     String?
+  address     String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model PortfolioComment {
+  id          String   @id @default(uuid())
+  name        String
+  email       String
+  message     String   @db.Text
+  approved    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  @@index([approved])
+}

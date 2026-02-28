@@ -7,6 +7,7 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { Client as MinioClient } from 'minio';
 import { buffer } from 'stream/consumers';
+import portfolioRoutes from './portfolio';
 
 const app = new Hono();
 const prisma = new PrismaClient();
@@ -440,6 +441,9 @@ app.delete('/api/posts/:id', authMiddleware, async (c) => {
 app.get('/api/health', (c) => {
   return c.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Portfolio routes
+app.route('/', portfolioRoutes);
 
 // Start Server
 const port = parseInt(process.env.PORT || '3001', 10);

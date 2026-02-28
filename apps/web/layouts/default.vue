@@ -7,7 +7,10 @@
         </NuxtLink>
         <nav class="flex items-center gap-4">
           <NuxtLink to="/" class="text-sm font-medium text-muted-foreground hover:text-foreground">
-            Home
+            Blog
+          </NuxtLink>
+          <NuxtLink to="/portfolio" class="text-sm font-medium text-muted-foreground hover:text-foreground">
+            Portfolio
           </NuxtLink>
           <div v-if="authStore.isAuthenticated">
             <NuxtLink
